@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Джарвис</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b1220">
+<meta name="color-scheme" content="dark">
+<style>
+:root{--bg:#0b1220;--pn:#111b2e;--fd:#17233b;--fg:#d6e4ff;--mu:#7f93b5;--ac:#00d4ff;--ok:#7cfc9a;--er:#ff6b6b;--st:#475569;--c:var(--st);box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--fg);font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;display:flex;flex-direction:column;overflow:hidden}
+section{display:none;flex:1;min-height:0;flex-direction:column;padding:12px 14px;gap:10px;overflow:auto}
+section.on{display:flex}
+nav{display:flex;background:var(--pn)}
+nav button{flex:1;padding:14px 4px;background:none;border:0;color:var(--mu);font:inherit;font-size:14px}
+nav button.on{color:var(--ac);box-shadow:inset 0 -3px var(--ac)}
+button,input,select{font:inherit;color:var(--fg)}
+.btn{background:var(--fd);border:0;border-radius:10px;padding:12px 14px;min-height:44px}
+.btn.ac{background:var(--ac);color:#001018;font-weight:600}
+.btn.dn{color:var(--er)}
+input[type=text],input:not([type]),select{width:100%;background:var(--fd);border:0;border-radius:10px;padding:12px;min-height:44px}
+label{display:block;color:var(--mu);font-size:14px;margin:12px 0 4px}
+.top{display:flex;align-items:center;gap:14px}
+.orb{position:relative;width:64px;height:64px;flex:none}
+.orb i,.orb b{position:absolute;border-radius:50%}
+.orb i{inset:0;border:2px solid var(--c)}
+.orb b{inset:20px;background:var(--c)}
+.orb.listening{--c:#22c55e}.orb.awaiting{--c:#facc15}.orb.speaking{--c:var(--ac)}
+.orb:not(.off) i{animation:p 2s ease-in-out infinite}
+.orb.awaiting i{animation-duration:.9s}.orb.speaking i{animation-duration:.5s}
+@keyframes p{50%{transform:scale(1.12)}}
+@media(prefers-reduced-motion:reduce){.orb i{animation:none!important}}
+#st{font-weight:700;font-size:18px}
+#part{color:var(--mu);font-size:14px;min-height:20px}
+.acts{display:flex;gap:8px}.acts .btn{flex:1}
+#log{flex:1;min-height:80px;overflow:auto;background:var(--pn);border-radius:12px;padding:10px;font-size:14px}
+.l{margin:0 0 6px;overflow-wrap:anywhere}.tm{color:var(--mu)}
+.user{color:var(--ac)}.jarvis{color:var(--ok)}.sys{color:var(--mu)}.err{color:var(--er)}
+#chip{display:none;width:100%}
+.row{background:var(--pn);border-radius:12px;padding:12px;display:flex;gap:10px;align-items:center}
+.row div{flex:1;min-width:0}.row small{display:block;color:var(--mu);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.muted{color:var(--mu);font-size:14px;margin:0}
+.send{display:flex;gap:8px}
+#sheet{position:fixed;inset:0;background:#000a;display:none;align-items:flex-end}
+#sheet.on{display:flex}
+#sheet>div{width:100%;max-height:92%;overflow:auto;background:var(--pn);border-radius:18px 18px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom,0px))}
+.two{display:flex;gap:8px}.two>*{flex:1}
+</style>
+</head>
+<body>
+
+<section id="t0" class="on">
+  <div class="top">
+    <div class="orb off" id="orb"><i></i><b></b></div>
+    <div><div id="st">Микрофон выключен</div><div id="part"></div><div id="net" class="muted"></div></div>
+  </div>
+  <div class="two" id="modes"><button class="btn ac" data-m="v">🎤 Говорить</button><button class="btn" data-m="t">✍ Писать</button></div>
+  <div class="acts" id="acts">
+    <button class="btn ac" id="mic">▶ Включить микрофон</button>
+    <button class="btn" id="teach">🎓 Обучить</button>
+  </div>
+  <div id="log"></div>
+  <button class="btn ac" id="chip"></button>
+  <div class="send"><input id="inp" placeholder="Команда текстом" enterkeyhint="send" autocomplete="off"><button class="btn ac" id="go">Отправить</button></div>
+</section>
+
+<section id="t1">
+  <p class="muted">Команды, которым ты его научил. Они приоритетнее встроенных.</p>
+  <div id="cmds" style="display:flex;flex-direction:column;gap:8px"></div>
+  <div class="two"><button class="btn ac" id="add">＋ Добавить</button></div>
+  <div class="two"><button class="btn" id="exp">Экспорт</button><button class="btn" id="imp">Импорт</button></div>
+</section>
+
+<section id="t2">
+  <p class="muted">Фразы, которые Джарвис не понял. Нажми, чтобы научить.</p>
+  <div id="unk" style="display:flex;flex-direction:column;gap:8px"></div>
+  <button class="btn" id="clr">Очистить список</button>
+</section>
+
+<section id="t3">
+  <label style="display:flex;gap:10px;align-items:center;color:var(--fg);font-size:16px"><input type="checkbox" id="sv"> Озвучивать ответы</label>
+  <label>Скорость речи</label><input type="range" id="sr" min="0.6" max="1.8" step="0.1">
+  <label>Слова активации (через запятую)</label><input id="sw">
+  <button class="btn ac" id="ss" style="margin-top:16px">Сохранить</button>
+  <p class="muted" style="margin-top:16px">Без интернета работают режим «Писать», твои команды, время, дата, калькулятор и озвучка (если в телефоне есть русский голос). Голос работает без интернета, если скачать русский офлайн-пакет: Настройки телефона → Google → Голосовой ввод → Офлайн-распознавание. Ответы из сети (Википедия, погода) требуют интернета.</p>
+</section>
+
+<nav>
+  <button data-t="0" class="on">Консоль</button><button data-t="1">Команды</button><button data-t="2">Не понял</button><button data-t="3">Настройки</button>
+</nav>
+
+<div id="sheet"><div>
+  <label style="margin-top:0">Фраза (что говорить)</label>
+  <div class="send"><input id="ph"><button class="btn" id="rec">🎤</button></div>
+  <label>Что сделать</label><select id="ty"></select>
+  <label>Значение</label><input id="va">
+  <p class="muted" id="hint" style="margin-top:4px"></p>
+  <label>Ответ голосом после выполнения (необязательно)</label><input id="rp">
+  <div class="two" style="margin-top:16px"><button class="btn" id="cx">Отмена</button><button class="btn dn" id="dl">Удалить</button><button class="btn ac" id="sa">Сохранить</button></div>
+</div></div>
+
+<script>
+const $=s=>document.querySelector(s);
+const h=(t,p={},...k)=>{const e=document.createElement(t);Object.assign(e,p);k.flat().forEach(x=>e.append(x));return e};
+const LS={get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
+
+const S={voice:true,rate:1,wake:"джарвис, джарвиз, жарвис, джервис, джарвес, чарвис, дарвис",...LS.get('j_set',{})};
+let CMDS=LS.get('j_cmds',[]),UNK=[];
+const intent=a=>`intent:#Intent;action=android.settings.${a};end`;
+const cat=c=>`intent:#Intent;action=android.intent.action.MAIN;category=android.intent.category.${c};end`;
+const APPS={"телеграм":"tg://","телеграмм":"tg://","ватсап":"whatsapp://","вотсап":"whatsapp://","вайбер":"viber://","дискорд":"discord://","спотифай":"spotify:","инстаграм":"instagram://","вк":"vk://","телефон":"tel:","сообщения":"sms:","почта":"mailto:","плей маркет":"market://","камера":"intent:#Intent;action=android.media.action.STILL_IMAGE_CAMERA;end","калькулятор":cat("APP_CALCULATOR"),"галерея":cat("APP_GALLERY"),"контакты":cat("APP_CONTACTS"),"календарь":cat("APP_CALENDAR"),"будильник":"intent:#Intent;action=android.intent.action.SHOW_ALARMS;end","настройки":intent("SETTINGS"),"вай фай":intent("WIFI_SETTINGS"),"блютуз":intent("BLUETOOTH_SETTINGS"),"настройки звука":intent("SOUND_SETTINGS"),"настройки экрана":intent("DISPLAY_SETTINGS")};
+const SITES={"ютуб":"https://www.youtube.com","ютуб музыка":"https://music.youtube.com","гугл":"https://www.google.com","карты":"https://maps.google.com","гугл карты":"https://maps.google.com","гугл диск":"https://drive.google.com","переводчик":"https://translate.google.com","яндекс":"https://ya.ru","яндекс музыка":"https://music.yandex.ru","гмейл":"https://mail.google.com","вконтакте":"https://vk.com","одноклассники":"https://ok.ru","гитхаб":"https://github.com","википедия":"https://ru.wikipedia.org","чат гпт":"https://chatgpt.com","клод":"https://claude.ai","озон":"https://www.ozon.ru","вайлдберриз":"https://www.wildberries.ru","авито":"https://www.avito.ru","новости":"https://news.google.com","погода":"https://yandex.ru/pogoda","нетфликс":"https://www.netflix.com","кинопоиск":"https://www.kinopoisk.ru","рутуб":"https://rutube.ru","тикток":"https://www.tiktok.com","твич":"https://www.twitch.tv","реддит":"https://www.reddit.com","фейсбук":"https://www.facebook.com","твиттер":"https://x.com"};
+const TYPES={app:"Открыть приложение (схема / ссылка)",url:"Открыть сайт",tel:"Позвонить",say:"Ответить голосом",chain:"Команды Джарвиса (через ;)"};
+const HINTS={app:"Например: tg://, whatsapp://, spotify:, intent:#Intent;action=android.settings.SETTINGS;end",url:"Адрес сайта: youtube.com",tel:"Номер телефона: +992900000000",say:"Фраза, которую Джарвис произнесёт",chain:"Несколько команд подряд: открой ютуб; который час"};
+
+/* ---------- утилиты ---------- */
+const has=(c,...w)=>w.some(x=>c.includes(x));
+const after=(c,...m)=>{for(const x of m)if(c.includes(x))return c.split(x).slice(1).join(x).trim();return""};
+const kw=(k,t)=>new RegExp("(?<![\\p{L}\\d])"+k.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")+"[\\p{L}]{0,2}(?![\\p{L}\\d])","u").test(t);
+function ratio(a,b){const m=a.length,n=b.length;if(!m||!n)return 0;let p=[...Array(n+1).keys()];for(let i=1;i<=m;i++){const c=[i];for(let j=1;j<=n;j++)c[j]=Math.min(p[j]+1,c[j-1]+1,p[j-1]+(a[i-1]==b[j-1]?0:1));p=c}return 1-p[n]/Math.max(m,n)}
+function log(t,tag='sys'){const L=$('#log');L.append(h('div',{className:'l '+tag},h('span',{className:'tm',textContent:new Date().toTimeString().slice(0,8)+' '}),t));L.scrollTop=L.scrollHeight}
+
+/* ---------- движок ---------- */
+const NATIVE=!!window.Android;
+const SR=NATIVE||window.SpeechRecognition||window.webkitSpeechRecognition;
+let rec=null,listening=false,spk=0,awaitUntil=0,mode=null,pending=null,tPhrase="",capture=false,capCb=null,depth=0,wl=null;
+
+function upd(){
+  const s=!listening?'off':spk?'speaking':(mode||capture||Date.now()<awaitUntil)?'awaiting':'listening';
+  $('#orb').className='orb '+s;
+  $('#st').textContent=(s=='off'&&S.mode=='t')?'Пиши команду ниже':{off:'Микрофон выключен',speaking:'Говорю...',awaiting:'Слушаю команду...',listening:'Жду «Джарвис»'}[s];
+  $('#mic').textContent=listening?'■ Выключить микрофон':'▶ Включить микрофон';
+}
+setInterval(upd,500);
+
+function startRec(){
+  if(!SR||!listening||spk||rec)return;
+  if(NATIVE){rec=1;Android.startListening();return}
+  rec=new SR();rec.lang='ru-RU';rec.continuous=true;rec.interimResults=true;
+  rec.onresult=e=>{let p='';for(let i=e.resultIndex;i<e.results.length;i++){const r=e.results[i];
+    if(r.isFinal){const t=r[0].transcript.trim();if(t){log('Услышал: '+t,'user');route(t,true)}}else p+=r[0].transcript}
+    $('#part').textContent=p?'Слышу: '+p:''};
+  rec.onerror=e=>{if(e.error=='not-allowed'||e.error=='service-not-allowed'){log('Нет доступа к микрофону. Разреши его в настройках сайта.','err');listening=false;upd()}
+    else if(e.error=='network'){log('Голосу нужен интернет. Переключись на «✍ Писать» — это работает и без сети.','err');listening=false;stopRec();unlock();upd()}
+    else if(e.error!='no-speech'&&e.error!='aborted')log('Ошибка распознавания: '+e.error,'err')};
+  rec.onend=()=>{rec=null;$('#part').textContent='';if(listening&&!spk)setTimeout(startRec,300)};
+  try{rec.start()}catch(e){rec=null}
+}
+function stopRec(){if(NATIVE){rec=null;Android.stopListening();$('#part').textContent='';return}if(rec){const r=rec;rec=null;r.onend=null;try{r.abort()}catch(e){}}$('#part').textContent=''}
+async function lock(){try{wl=await navigator.wakeLock.request('screen')}catch(e){}}
+function unlock(){try{wl&&wl.release()}catch(e){}wl=null}
+document.addEventListener('visibilitychange',()=>{if(listening&&!document.hidden){lock();startRec()}});
+
+function toggleMic(){
+  if(!SR){log('Этот браузер не умеет распознавать речь. Открой страницу в Chrome на Android.','err');return false}
+  listening=!listening;
+  if(listening){startRec();lock();log('Микрофон включён. Скажи «Джарвис».')}
+  else{stopRec();awaitUntil=0;mode=null;unlock()}
+  upd();return listening;
+}
+
+function say(t){
+  log(t,'jarvis');
+  if(!S.voice||(!NATIVE&&!window.speechSynthesis))return;
+  stopRec();spk++;upd();
+  if(NATIVE){Android.speak(t,+S.rate);return}
+  const u=new SpeechSynthesisUtterance(t);u.lang='ru-RU';u.rate=+S.rate;
+  const done=()=>{spk=Math.max(0,spk-1);upd();if(!spk&&listening)setTimeout(startRec,200)};
+  u.onend=done;u.onerror=done;speechSynthesis.speak(u);
+}
+
+function findWake(t){
+  const ts=S.wake.split(',').map(x=>x.trim().toLowerCase()).filter(Boolean),w=t.split(/\s+/);
+  for(let i=0;i<w.length;i++)for(const x of ts)if(w[i].includes(x)||(w[i].length>=4&&ratio(w[i],x)>=.75))return[true,w.slice(i+1).join(' ')];
+  return[false,''];
+}
+
+function route(text,voice){
+  const t=text.toLowerCase().trim();if(!t)return;
+  if(capture&&voice){capture=false;const f=capCb;capCb=null;f&&f(t);upd();return}
+  const[f,rest]=findWake(t);
+  if(mode){dialog(f&&rest?rest:t);return}
+  if(!voice){execute(f&&rest?rest:t);return}
+  if(f){if(rest){awaitUntil=0;execute(rest)}else{say('Слушаю');awaitUntil=Date.now()+8000}}
+  else if(Date.now()<awaitUntil){awaitUntil=0;execute(t)}
+  upd();
+}
+
+/* открытие ссылок: из голоса браузер требует нажатия — тогда показываем кнопку */
+function go(u,label){
+  if(NATIVE){Android.openUrl(u);return}
+  const act=!navigator.userActivation||navigator.userActivation.isActive;
+  const open=()=>{/^https?:/.test(u)?(window.open(u,'_blank')||(location.href=u)):(location.href=u)};
+  if(act){open();return}
+  chip(u,label);
+}
+function chip(u,label){
+  const c=$('#chip');c.style.display='block';c.textContent='Открыть: '+(label||u);
+  c.onclick=()=>{c.style.display='none';/^https?:/.test(u)?(window.open(u,'_blank')||(location.href=u)):(location.href=u)};
+}
+
+function askConfirm(desc,fn){mode='confirm';pending=fn;say(desc+'. Подтвердить? Скажите да или нет.')}
+function teachStart(){if(!listening&&SR)toggleMic();mode='teach_phrase';say('Режим обучения. Какую фразу мне запомнить? Для отмены скажите отмена.')}
+function setCmds(c){CMDS=c;LS.set('j_cmds',c);renderCmds()}
+
+function dialog(t){
+  const w=new Set(t.split(/\s+/));
+  if(mode=='confirm'){const f=pending;pending=null;mode=null;if(['да','подтверждаю','давай','ага'].some(x=>w.has(x)))f();else say('Отменено');return}
+  if(w.has('отмена')||w.has('отмени')){mode=null;say('Обучение отменено');return}
+  if(mode=='teach_phrase'){tPhrase=t;mode='teach_action';say('Что делать, когда вы скажете '+t+'? Назовите команду, например: открой ютуб.')}
+  else if(mode=='teach_action'){setCmds(CMDS.filter(c=>c.phrase!=tPhrase).concat({phrase:tPhrase,type:'chain',value:t,reply:''}));mode=null;say('Запомнил')}
+}
+
+function execute(cmd){
+  cmd=cmd.trim().toLowerCase();if(!cmd)return;
+  if(++depth>5){depth--;return}
+  try{
+    let m=CMDS.find(c=>c.phrase.toLowerCase()==cmd)||[...CMDS].filter(c=>c.phrase&&cmd.includes(c.phrase.toLowerCase())).sort((a,b)=>b.phrase.length-a.phrase.length)[0];
+    if(!m&&CMDS.length){let best=0;for(const c of CMDS){const r=ratio(cmd,c.phrase.toLowerCase());if(r>best&&r>=.8){best=r;m=c}}}
+    if(m){runCustom(m);return}
+    if(!builtin(cmd)){
+      if(navigator.onLine&&depth==1){lookup(cmd);return}
+      say(navigator.onLine?'Не понял команду':'Не понял команду. Интернета нет, из сети ответить не могу.');
+      if(depth==1&&!UNK.includes(cmd)){UNK.push(cmd);renderUnk()}}
+  }finally{depth--}
+}
+
+function runCustom(c){
+  const v=c.value||'',t=c.type;
+  try{
+    if(t=='app')go(v,c.phrase);
+    else if(t=='url')go(/^https?:/.test(v)?v:'https://'+v,c.phrase);
+    else if(t=='tel')go('tel:'+v.replace(/[^\d+]/g,''),c.phrase);
+    else if(t=='say')say(v);
+    else if(t=='chain')v.split(';').forEach(execute);
+  }catch(e){log('Ошибка команды «'+c.phrase+'»: '+e.message,'err');return}
+  if(c.reply&&t!='say')say(c.reply);else log('Выполнено: '+c.phrase);
+}
+
+function openByName(target){
+  target=target.trim();if(!target)return false;
+  if(NATIVE){const a=findInstalled(target,.82);if(a){Android.launch(a.pkg);say('Открываю '+a.label);return true}}
+  let c=[...Object.entries(APPS).filter(([k])=>kw(k,target)).map(([k,v])=>[k.length,1,k,v]),...Object.entries(SITES).filter(([k])=>kw(k,target)).map(([k,v])=>[k.length,0,k,v])].sort((a,b)=>b[0]-a[0]||b[1]-a[1])[0];
+  if(!c){let best=0;const ws=[target,...target.split(/\s+/)];
+    for(const[k,v]of Object.entries({...SITES,...APPS}))for(const w of ws){const r=ratio(w,k);if(r>best&&r>=.8){best=r;c=[0,0,k,v]}}}
+  if(!c)return false;
+  go(c[3],c[2]);say('Открываю '+c[2]);return true;
+}
+
+/* ---------- установленные приложения (только в приложении) ---------- */
+const TR=Object.fromEntries([...'абвгдеёжзийклмнопрстуфхцчшщъыьэюя'].map((c,i)=>[c,['a','b','v','g','d','e','e','zh','z','i','i','k','l','m','n','o','p','r','s','t','u','f','h','ts','ch','sh','sh','','y','','e','yu','ya'][i]]));
+function norm(t){t=[...t.toLowerCase()].map(c=>TR[c]??c).join('').replace(/[^a-z0-9]/g,'');for(const[a,b]of[['ph','f'],['ck','k'],['c','k'],['kh','h'],['w','v'],['x','ks'],['y','i'],['q','k']])t=t.split(a).join(b);return t.replace(/(.)\1+/g,'$1')}
+let APPIDX=null;
+function findInstalled(target,th){
+  if(!APPIDX){try{APPIDX=JSON.parse(Android.listApps()).map(a=>({...a,n:norm(a.label),toks:a.label.split(/[\s\-_.()]+/).filter(x=>x.length>=3).map(norm)}))}catch(e){APPIDX=[]}}
+  const ws=target.toLowerCase().split(/\s+/),vs=new Set([norm(target),...ws.filter(w=>w.length>=3).map(norm),...ws.slice(1).map((w,i)=>norm(ws[i]+w))]);vs.delete('');
+  let best=null,bs=0;
+  for(const a of APPIDX)for(const v of vs){let sc=ratio(v,a.n);for(const k of a.toks)sc=Math.max(sc,.95*ratio(v,k));if(sc>bs){bs=sc;best=a}}
+  return bs>=th?best:null;
+}
+window.onNative=(t,fin)=>{if(fin){$('#part').textContent='';if(t){log('Услышал: '+t,'user');route(t,true)}}else $('#part').textContent=t?'Слышу: '+t:''};
+window.onNativeError=m=>{log(m,'err');if(/доступ|пакет|поддерж/.test(m)){listening=false;rec=null;upd()}};
+window.onSpeakDone=()=>{spk=Math.max(0,spk-1);upd();if(!spk&&listening)setTimeout(startRec,200)};
+
+
+function builtin(cmd){
+  if(NATIVE){
+    if(has(cmd,'громче','прибавь звук')){Android.volume(1);return true}
+    if(has(cmd,'тише','убавь звук')){Android.volume(-1);return true}
+    if(has(cmd,'без звука','выключи звук')){Android.volume(0);return true}
+    if(has(cmd,'фонарик')){Android.flash(!has(cmd,'выключи','погаси'));return true}
+  }
+  if(has(cmd,'отключись','выключи микрофон','не слушай')){say('Перехожу в режим ожидания');listening=false;stopRec();unlock();upd();return true}
+  if(has(cmd,'научись','запомни команду','новая команда','режим обучения')){teachStart();return true}
+  const fg=after(cmd,'забудь команду','удали команду');
+  if(fg){const left=CMDS.filter(c=>!c.phrase.toLowerCase().includes(fg));if(left.length!=CMDS.length){setCmds(left);say('Забыл')}else say('Такой команды нет');return true}
+  if(has(cmd,'который час','сколько времени','время')){say('Сейчас '+new Date().toTimeString().slice(0,5));return true}
+  if(has(cmd,'какое число','какая дата','дата')){say('Сегодня '+new Date().toLocaleDateString('ru-RU',{day:'numeric',month:'long',year:'numeric'}));return true}
+  if(has(cmd,'заряд','батаре')){navigator.getBattery?navigator.getBattery().then(b=>say('Заряд '+Math.round(b.level*100)+' процентов'+(b.charging?', идёт зарядка':''))):say('Браузер не показывает заряд');return true}
+  const num=after(cmd,'позвони','набери');
+  if(num){const d=num.replace(/\D/g,'');if(d.length>=3){go('tel:'+d,'позвонить '+d);say('Набираю')}else say('Назови номер цифрами или научи меня имени контакта');return true}
+  const dest=after(cmd,'маршрут до','как доехать до','поехали в');
+  if(dest){go('https://www.google.com/maps/dir/?api=1&destination='+encodeURIComponent(dest),'маршрут');say('Строю маршрут до '+dest);return true}
+  if(has(cmd,'погод')){weather(after(cmd,'погода в','погоду в','погода во','погода'));return true}
+  const ex=after(cmd,'сколько будет','посчитай','реши');
+  if(ex){const r=calc(ex);if(r!==null){say(ex+' — '+r);return true}}
+  let q=after(cmd,'найди в интернете','найди','поищи','загугли','расскажи про','расскажи о','кто такой','кто такая','что такое');
+  if(q){lookup(q);return true}
+  q=after(cmd,'включи на ютубе','включи музыку','включи видео');
+  if(q){go('https://www.youtube.com/results?search_query='+encodeURIComponent(q),'ютуб');say('Включаю');return true}
+  if(has(cmd,'открой','запусти','включи')){
+    const t=after(cmd,'открой','запусти','включи');
+    if(openByName(t))return true;
+    if(NATIVE){const a=findInstalled(t,.7);if(a){Android.launch(a.pkg);say('Открываю '+a.label);return true}}
+    say('Не нашёл '+t);if(depth==1&&!UNK.includes(cmd)){UNK.push(cmd);renderUnk()}return true;
+  }
+  return false;
+}
+
+/* ---------- интернет и счёт ---------- */
+const J=async u=>{const r=await fetch(u);if(!r.ok)throw 0;return r.json()};
+function short(t,n=320){const s=t.replace(/\s*\([^)]*\)/g,'').split(/(?<=[.!?])\s+/);let o='';for(const x of s){if((o+x).length>n&&o)break;o+=(o?' ':'')+x}return o}
+async function lookup(q){
+  q=q.trim();if(!q)return;
+  if(!navigator.onLine){say('Интернета нет. Из сети ответить не могу, но встроенные и твои команды работают.');return}
+  log('Ищу в интернете: '+q);
+  try{
+    const s=await J('https://ru.wikipedia.org/w/api.php?action=query&list=search&srlimit=1&format=json&origin=*&srsearch='+encodeURIComponent(q));
+    const hit=s.query.search[0];
+    if(!hit){say('Ничего не нашёл по запросу «'+q+'»');chip('https://www.google.com/search?q='+encodeURIComponent(q),'искать в Google');return}
+    const r=await J('https://ru.wikipedia.org/api/rest_v1/page/summary/'+encodeURIComponent(hit.title));
+    say(hit.title+'. '+short(r.extract||'Описания нет.'));
+    chip((r.content_urls&&r.content_urls.mobile.page)||'https://ru.wikipedia.org','читать полностью: '+hit.title);
+  }catch(e){say('Не удалось получить ответ из интернета. Проверь соединение.')}
+}
+async function weather(place){
+  if(!navigator.onLine){say('Интернета нет, погоду узнать не могу');return}
+  try{
+    let lat,lon,name=place;
+    if(place){const g=(await J('https://geocoding-api.open-meteo.com/v1/search?count=1&language=ru&name='+encodeURIComponent(place))).results;
+      if(!g){say('Не нашёл город '+place);return}lat=g[0].latitude;lon=g[0].longitude;name=g[0].name}
+    else{const p=await new Promise((ok,no)=>navigator.geolocation.getCurrentPosition(ok,no,{timeout:8000}));lat=p.coords.latitude;lon=p.coords.longitude;name='у вас'}
+    const c=(await J(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,wind_speed_10m,precipitation&timezone=auto`)).current;
+    say(`Погода ${name}: ${Math.round(c.temperature_2m)} градусов, ветер ${Math.round(c.wind_speed_10m)} км/ч`+(c.precipitation>0?', идут осадки':', без осадков'));
+  }catch(e){say('Не получилось узнать погоду. Назови город, например: погода в Душанбе')}
+}
+function calc(t){
+  t=t.toLowerCase().replace(/плюс/g,'+').replace(/минус/g,'-').replace(/умножить на|умножь на|помножить на/g,'*').replace(/разделить на|раздели на|делить на/g,'/').replace(/\bх\b|\bx\b/g,'*').replace(/в степени/g,'**').replace(/,/g,'.').replace(/\?/g,'');
+  if(!/^[\d\s+\-*/().%]+$/.test(t))return null;
+  try{const r=Function('"use strict";return ('+t+')')();return Number.isFinite(r)?Math.round(r*1e6)/1e6:null}catch(e){return null}
+}
+function setMode(m){
+  S.mode=m;LS.set('j_set',S);
+  document.querySelectorAll('#modes button').forEach(b=>b.classList.toggle('ac',b.dataset.m==m));
+  $('#acts').style.display=m=='t'?'none':'flex';
+  $('#inp').placeholder=m=='t'?'Напиши вопрос или команду':'Команда текстом';
+  if(m=='t'){if(listening)toggleMic();$('#inp').focus()}
+  upd();
+}
+document.querySelectorAll('#modes button').forEach(b=>b.onclick=()=>setMode(b.dataset.m));
+function net(){$('#net').textContent=navigator.onLine?'Онлайн: могу искать ответы в интернете':'Офлайн: работают встроенные и твои команды (текстом)'}
+addEventListener('online',net);addEventListener('offline',net);
+
+/* ---------- интерфейс ---------- */
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on',x==b));
+  document.querySelectorAll('section').forEach((s,i)=>s.classList.toggle('on',i==b.dataset.t));
+});
+function send(){const v=$('#inp').value.trim();if(!v)return;$('#inp').value='';log('Вы: '+v,'user');route(v,false)}
+$('#go').onclick=send;$('#inp').onkeydown=e=>{if(e.key=='Enter')send()};
+$('#mic').onclick=toggleMic;$('#teach').onclick=teachStart;
+
+function renderCmds(){
+  const box=$('#cmds');box.textContent='';
+  if(!CMDS.length)box.append(h('p',{className:'muted',textContent:'Пока пусто. Нажми «Добавить» или скажи «Джарвис, научись».'}));
+  CMDS.forEach((c,i)=>box.append(h('div',{className:'row'},
+    h('div',{onclick:()=>openSheet(c,i)},h('b',{textContent:c.phrase}),h('small',{textContent:(TYPES[c.type]||c.type)+' · '+c.value})),
+    h('button',{className:'btn',textContent:'▶',onclick:()=>runCustom(c)}))));
+}
+function renderUnk(){
+  const box=$('#unk');box.textContent='';
+  UNK.forEach(p=>box.append(h('div',{className:'row',onclick:()=>openSheet({phrase:p,type:'app',value:''},-1)},h('div',{textContent:p}))));
+}
+$('#clr').onclick=()=>{UNK=[];renderUnk()};
+
+let editIdx=-1;
+$('#ty').append(...Object.entries(TYPES).map(([k,v])=>h('option',{value:k,textContent:v})));
+$('#ty').onchange=()=>$('#hint').textContent=HINTS[$('#ty').value];
+function openSheet(c={},i=-1){
+  editIdx=i;$('#ph').value=c.phrase||'';$('#ty').value=c.type||'app';$('#va').value=c.value||'';$('#rp').value=c.reply||'';
+  $('#hint').textContent=HINTS[$('#ty').value];$('#dl').style.display=i>=0?'':'none';$('#sheet').classList.add('on');
+}
+function closeSheet(){$('#sheet').classList.remove('on');capture=false;capCb=null;$('#rec').textContent='🎤'}
+$('#add').onclick=()=>openSheet();$('#cx').onclick=closeSheet;
+$('#sheet').onclick=e=>{if(e.target.id=='sheet')closeSheet()};
+$('#rec').onclick=()=>{
+  if(!listening&&!toggleMic())return;
+  capture=true;$('#rec').textContent='Говорите...';
+  capCb=t=>{$('#ph').value=t;$('#rec').textContent='🎤'};upd();
+};
+$('#sa').onclick=()=>{
+  const phrase=$('#ph').value.trim().toLowerCase(),value=$('#va').value.trim();
+  if(!phrase||!value){alert('Заполни фразу и значение');return}
+  const c={phrase,type:$('#ty').value,value,reply:$('#rp').value.trim()},l=CMDS.slice();
+  if(editIdx>=0)l[editIdx]=c;else l.push(c);
+  setCmds(l.filter((x,i)=>x.phrase!=phrase||l.indexOf(x)==i||x===c));
+  UNK=UNK.filter(x=>x!=phrase);renderUnk();closeSheet();
+};
+$('#dl').onclick=()=>{if(confirm('Удалить команду?')){setCmds(CMDS.filter((_,i)=>i!=editIdx));closeSheet()}};
+
+$('#exp').onclick=async()=>{const j=JSON.stringify(CMDS,null,1);try{await navigator.clipboard.writeText(j);log('Команды скопированы в буфер обмена')}catch(e){prompt('Скопируй команды:',j)}};
+$('#imp').onclick=()=>{
+  const s=prompt('Вставь JSON с командами');if(!s)return;
+  try{const d=JSON.parse(s),known=new Set(CMDS.map(c=>c.phrase));
+    const n=d.filter(c=>c&&c.phrase&&c.type&&c.value&&!known.has(c.phrase));setCmds(CMDS.concat(n));log('Импортировано команд: '+n.length)}
+  catch(e){alert('Не удалось прочитать JSON')}
+};
+
+$('#sv').checked=S.voice;$('#sr').value=S.rate;$('#sw').value=S.wake;
+$('#ss').onclick=()=>{Object.assign(S,{voice:$('#sv').checked,rate:+$('#sr').value,wake:$('#sw').value});LS.set('j_set',S);log('Настройки сохранены')};
+
+renderCmds();net();setMode(S.mode||(SR?'v':'t'));
+log('Готов. Пиши вопрос или команду внизу. Примеры: «что такое чёрная дыра», «погода в Душанбе», «сколько будет 12 умножить на 7», «открой ютуб».');
+</script>
+</body>
+</html>
