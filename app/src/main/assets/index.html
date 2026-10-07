@@ -159,14 +159,15 @@ function toggleMic(){
   listening=!listening;
   if(listening){startRec();lock();log('Микрофон включён. Скажи «Джарвис».')}
   else{stopRec();awaitUntil=0;mode=null;unlock()}
+  LS.set('j_mic',listening);
   upd();return listening;
 }
 
 function say(t){
   log(t,'jarvis');
   if(!S.voice||(!NATIVE&&!window.speechSynthesis))return;
+  if(NATIVE){spk++;upd();Android.speak(t,+S.rate);return}
   stopRec();spk++;upd();
-  if(NATIVE){Android.speak(t,+S.rate);return}
   const u=new SpeechSynthesisUtterance(t);u.lang='ru-RU';u.rate=+S.rate;
   const done=()=>{spk=Math.max(0,spk-1);upd();if(!spk&&listening)setTimeout(startRec,200)};
   u.onend=done;u.onerror=done;speechSynthesis.speak(u);
@@ -184,7 +185,7 @@ function route(text,voice){
   const[f,rest]=findWake(t);
   if(mode){dialog(f&&rest?rest:t);return}
   if(!voice){execute(f&&rest?rest:t);return}
-  if(f){if(rest){awaitUntil=0;execute(rest)}else{say('Слушаю');awaitUntil=Date.now()+8000}}
+  if(f){if(rest){awaitUntil=0;execute(rest)}else{say('Слушаю');awaitUntil=Date.now()+10000}}
   else if(Date.now()<awaitUntil){awaitUntil=0;execute(t)}
   upd();
 }
@@ -218,12 +219,13 @@ function execute(cmd){
   cmd=cmd.trim().toLowerCase();if(!cmd)return;
   if(++depth>5){depth--;return}
   try{
+    const sm=cmd.match(/^поиск\s*(.*)$/);
+    if(sm){const q=sm[1].trim();if(q)lookup(q);else say('Что искать? Скажи: Джарвис, поиск, и слово.');return}
     let m=CMDS.find(c=>c.phrase.toLowerCase()==cmd)||[...CMDS].filter(c=>c.phrase&&cmd.includes(c.phrase.toLowerCase())).sort((a,b)=>b.phrase.length-a.phrase.length)[0];
     if(!m&&CMDS.length){let best=0;for(const c of CMDS){const r=ratio(cmd,c.phrase.toLowerCase());if(r>best&&r>=.8){best=r;m=c}}}
     if(m){runCustom(m);return}
     if(!builtin(cmd)){
-      if(navigator.onLine&&depth==1){lookup(cmd);return}
-      say(navigator.onLine?'Не понял команду':'Не понял команду. Интернета нет, из сети ответить не могу.');
+      say('Не понял команду');
       if(depth==1&&!UNK.includes(cmd)){UNK.push(cmd);renderUnk()}}
   }finally{depth--}
 }
@@ -263,7 +265,10 @@ function findInstalled(target,th){
 }
 window.onNative=(t,fin)=>{if(fin){$('#part').textContent='';if(t){log('Услышал: '+t,'user');route(t,true)}}else $('#part').textContent=t?'Слышу: '+t:''};
 window.onNativeError=m=>{log(m,'err');if(/доступ|пакет|поддерж/.test(m)){listening=false;rec=null;upd()}};
-window.onSpeakDone=()=>{spk=Math.max(0,spk-1);upd();if(!spk&&listening)setTimeout(startRec,200)};
+window.onSpeakDone=()=>{spk=Math.max(0,spk-1);upd()};
+window.onSpeakReset=()=>{spk=0;upd()};
+window.autoStart=()=>{if(NATIVE&&!listening&&S.mode!='t'&&LS.get('j_mic',true)){listening=true;startRec();upd();log('Микрофон включён. Скажи «Джарвис».')}};
+window.micOff=()=>{if(listening)toggleMic()};
 
 
 function builtin(cmd){
@@ -273,7 +278,7 @@ function builtin(cmd){
     if(has(cmd,'без звука','выключи звук')){Android.volume(0);return true}
     if(has(cmd,'фонарик')){Android.flash(!has(cmd,'выключи','погаси'));return true}
   }
-  if(has(cmd,'отключись','выключи микрофон','не слушай')){say('Перехожу в режим ожидания');listening=false;stopRec();unlock();upd();return true}
+  if(has(cmd,'отключись','выключи микрофон','не слушай')){say('Перехожу в режим ожидания');listening=false;LS.set('j_mic',false);stopRec();unlock();upd();return true}
   if(has(cmd,'научись','запомни команду','новая команда','режим обучения')){teachStart();return true}
   const fg=after(cmd,'забудь команду','удали команду');
   if(fg){const left=CMDS.filter(c=>!c.phrase.toLowerCase().includes(fg));if(left.length!=CMDS.length){setCmds(left);say('Забыл')}else say('Такой команды нет');return true}
@@ -287,9 +292,7 @@ function builtin(cmd){
   if(has(cmd,'погод')){weather(after(cmd,'погода в','погоду в','погода во','погода'));return true}
   const ex=after(cmd,'сколько будет','посчитай','реши');
   if(ex){const r=calc(ex);if(r!==null){say(ex+' — '+r);return true}}
-  let q=after(cmd,'найди в интернете','найди','поищи','загугли','расскажи про','расскажи о','кто такой','кто такая','что такое');
-  if(q){lookup(q);return true}
-  q=after(cmd,'включи на ютубе','включи музыку','включи видео');
+  let q=after(cmd,'включи на ютубе','включи музыку','включи видео');
   if(q){go('https://www.youtube.com/results?search_query='+encodeURIComponent(q),'ютуб');say('Включаю');return true}
   if(has(cmd,'открой','запусти','включи')){
     const t=after(cmd,'открой','запусти','включи');
@@ -403,7 +406,7 @@ $('#sv').checked=S.voice;$('#sr').value=S.rate;$('#sw').value=S.wake;
 $('#ss').onclick=()=>{Object.assign(S,{voice:$('#sv').checked,rate:+$('#sr').value,wake:$('#sw').value});LS.set('j_set',S);log('Настройки сохранены')};
 
 renderCmds();net();setMode(S.mode||(SR?'v':'t'));
-log('Готов. Пиши вопрос или команду внизу. Примеры: «что такое чёрная дыра», «погода в Душанбе», «сколько будет 12 умножить на 7», «открой ютуб».');
+log('Готов. Пиши вопрос или команду внизу. Примеры: «поиск чёрная дыра», «погода в Душанбе», «сколько будет 12 умножить на 7», «открой ютуб».');
 </script>
 </body>
 </html>
